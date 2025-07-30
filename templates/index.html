@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>QR Code Generator</h1>
+        <div class="form-container">
+            <input type="url" id="urlInput" placeholder="Enter URL (e.g., https://example.com)" required>
+            <button id="generateBtn" onclick="generateQR()">Generate QR Code</button>
+        </div>
+        
+        <div id="result" class="result-container" style="display: none;">
+            <h2>Your QR Code</h2>
+            <img id="qrCodeImage" alt="QR Code">
+            <button id="downloadBtn" onclick="downloadQR()">Download QR Code</button>
+        </div>
+        
+        <div id="error" class="error-container" style="display: none;">
+            <p id="errorMessage"></p>
+        </div>
+    </div>
+
+    <script>
+        let currentUrl = '';
+
+        function validateUrl(url) {
+            try {
+                new URL(url);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        async function generateQR() {
+            const urlInput = document.getElementById('urlInput');
+            const url = urlInput.value.trim();
+            const resultDiv = document.getElementById('result');
+            const errorDiv = document.getElementById('error');
+            const qrImage = document.getElementById('qrCodeImage');
+            
+            // Hide previous results
+            resultDiv.style.display = 'none';
+            errorDiv.style.display = 'none';
+            
+            if (!url) {
+                showError('Please enter a URL');
+                return;
+            }
+            
+            if (!validateUrl(url)) {
+                showError('Please enter a valid URL (including http:// or https://)');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentUrl = url;
+                    qrImage.src = data.qr_code;
+                    resultDiv.style.display = 'block';
+                } else {
+                    showError(data.error || 'Failed to generate QR code');
+                }
+            } catch (error) {
+                showError('Error generating QR code: ' + error.message);
+            }
+        }
+
+        async function downloadQR() {
+            if (!currentUrl) return;
+            
+            try {
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: currentUrl })
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `qr_code_${currentUrl.replace(/[^a-z0-9]/gi, '_').substring(0, 30)}.png`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                } else {
+                    const data = await response.json();
+                    showError(data.error || 'Failed to download QR code');
+                }
+            } catch (error) {
+                showError('Error downloading QR code: ' + error.message);
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        // Allow Enter key to generate QR code
+        document.getElementById('urlInput').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                generateQR();
+            }
+        });
+    </script>
+</body>
+</html>
